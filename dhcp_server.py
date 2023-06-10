@@ -1,3 +1,4 @@
+import json
 import socket
 
 MAX_BYTES = 1024
@@ -66,8 +67,22 @@ class DHCP_server(object):
         DHCPOptions3 = bytes([3 , 4 , 0xC0, 0xA8, 0x01, 0x01]) #192.168.1.1 router
         DHCPOptions4 = bytes([51 , 4 , 0x00, 0x01, 0x51, 0x80]) #86400s(1 day) IP address lease time
         DHCPOptions5 = bytes([54 , 4 , 0xC0, 0xA8, 0x01, 0x01]) # DHCP server
+
+        def create_dhcp_option():
+            auth_opt = {
+                'type': 0,
+                'length': 0,
+                'cert': "cert"
+            }
+            body = json.dumps(auth_opt)
+            length = len(body)
+            message = length.to_bytes(2, byteorder="big")
+            message += bytes(body, 'utf-8')
+            return message
+
+        DHCPOptions6 = create_dhcp_option()
         
-        package = OP + HTYPE + HLEN + HOPS + XID + SECS + FLAGS + CIADDR +YIADDR + SIADDR + GIADDR + CHADDR1 + CHADDR2 + CHADDR3 + CHADDR4 + CHADDR5 + Magiccookie + DHCPOptions1 + DHCPOptions2 + DHCPOptions3 + DHCPOptions4 + DHCPOptions5
+        package = OP + HTYPE + HLEN + HOPS + XID + SECS + FLAGS + CIADDR +YIADDR + SIADDR + GIADDR + CHADDR1 + CHADDR2 + CHADDR3 + CHADDR4 + CHADDR5 + Magiccookie + DHCPOptions1 + DHCPOptions2 + DHCPOptions3 + DHCPOptions4 + DHCPOptions5 + DHCPOptions6
 
         return package
 	
