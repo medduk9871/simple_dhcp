@@ -27,16 +27,15 @@ def verify_certificate_chain(cert_path, trusted_certs):
         return True
 
     except Exception as e:
-        print(e)
+        # print(e)
         return False
 
 if __name__ == "__main__":
-    cert_path = os.path.join("keys", "domain.crt")
-    trusted_certs = [os.path.join("keys", "rootCA.crt")]
+    for crt_name in ['domain.crt', 'rogue.crt']:
+        cert_path = os.path.join("keys", crt_name)
+        trusted_certs = [os.path.join("keys", "rootCA.crt")]
 
-    if not verify_certificate_chain(cert_path, trusted_certs):
-        print("Invalid certificate!")
-        sys.exit(1)
-
-    print("Valid certificate!")
-    sys.exit(0)
+        if not verify_certificate_chain(cert_path, trusted_certs):
+            print(f"{crt_name}: Invalid certificate!")
+        else:
+            print(f"{crt_name}: Valid certificate!")
