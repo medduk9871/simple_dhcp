@@ -24,6 +24,21 @@ class DHCP_client(object):
         data = DHCP_client.discover_get()
         s.sendto(data, dest)
 
+        data, address = self.check_cert_verify_and_get_data(s)
+
+        print("Send DHCP request.")
+        data = DHCP_client.request_get()
+        s.sendto(data, dest)
+
+        data, address = self.check_cert_verify_and_get_data(s)
+        print("Receive DHCP pack.\n")
+        #print(data)
+
+    def check_cert_verify_and_get_data(self, s):
+        """
+        :param s: socket to recieve data
+        :return: the recieved data
+        """
         cert_dict = {}
         received_cert = False
 
@@ -43,13 +58,8 @@ class DHCP_client(object):
             print("Cert invalid!")
             sys.exit(1)
 
-        print("Send DHCP request.")
-        data = DHCP_client.request_get()
-        s.sendto(data, dest)
-        
-        data,address = s.recvfrom(MAX_BYTES)
-        print("Receive DHCP pack.\n")
-        #print(data)
+        return data, address
+
 
     def get_auth_opt(self, data):
         origin_msg = data[:267]
