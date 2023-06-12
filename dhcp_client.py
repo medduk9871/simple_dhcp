@@ -1,9 +1,16 @@
+import collections
 import socket,sys
+from cert_verify import verify_certificate_chain
 
 MAX_BYTES = 1024
 
 serverPort = 67
 clientPort = 68
+
+from enum import Enum
+class DHCPauthType(Enum):
+    CA = 0
+    SERVER = 1
 
 class DHCP_client(object):
     def client(self):
@@ -14,16 +21,27 @@ class DHCP_client(object):
         s.bind(('0.0.0.0', clientPort))
 
         print("Send DHCP discovery.")
-        data = DHCP_client.discover_get();
+        data = DHCP_client.discover_get()
         s.sendto(data, dest)
-        
-        data, address = s.recvfrom(MAX_BYTES)
-        print("Receive DHCP offer.")
-        #print(data)
-        origin_msg, auth_opt, length = self.get_auth_opt(data)
 
-        print("auth_opt_len: ", length)
-        print("auth_opt : ", auth_opt)
+        cert_dict = {}
+        received_cert = False
+
+        while not received_cert:
+            data, address = s.recvfrom(MAX_BYTES)
+            print("Receive DHCP offer.")
+            #print(data)
+            origin_msg, auth_opt, length = self.get_auth_opt(data)
+
+            cert_dict[auth_opt['type']] = auth_opt['cert']
+            if len(cert_dict) == 2:
+                received_cert = True
+
+        print("Checking cert validity...")
+
+        if not verify_certificate_chain(cert_dict[DHCPauthType.SERVER], [cert_dict[DHCPauthType.CA]]):
+            print("Cert invalid!")
+            sys.exit(1)
 
         print("Send DHCP request.")
         data = DHCP_client.request_get()
