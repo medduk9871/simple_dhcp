@@ -1,5 +1,8 @@
 import json
 import socket
+import sys
+
+from cert_verify import verify_certificate_chain
 
 MAX_BYTES = 1024
 
@@ -10,6 +13,12 @@ cert_types = {
     1: 'domain',
     0: 'rootCA'
 }
+from enum import Enum
+
+
+class DHCPauthType(Enum):
+    CA = 0
+    SERVER = 1
 
 
 class DHCP_client(object):
@@ -24,22 +33,13 @@ class DHCP_client(object):
         data = DHCP_client.discover_get()
         s.sendto(data, dest)
 
-        rootCA_auth_opts = self.receive_offer(s)
+        data, address = self.check_cert_verify_and_get_data(s)
 
-        rootCA_cert = self.get_cert(rootCA_auth_opts)
-
-        print(rootCA_cert)
-
-        domain_auth_opts = self.receive_offer(s)
-
-        domain_cert = self.get_cert(domain_auth_opts)
-
-        print(domain_cert)
         print("Send DHCP request.")
         data = DHCP_client.request_get()
         s.sendto(data, dest)
 
-        data, address = s.recvfrom(MAX_BYTES)
+        data, address = self.check_cert_verify_and_get_data(s)
         print("Receive DHCP pack.\n")
         # print(data)
 
@@ -64,7 +64,30 @@ class DHCP_client(object):
             print(
                 f"Receive DHCP offer with auth option ({cert_types[auth_opt['type']]} {auth_opt['cur_number']}/{auth_opt['total_number']})")
         rootCA_auth_opts = dict(sorted(rootCA_auth_opts.items()))
-        return rootCA_auth_opts
+        return data, address, rootCA_auth_opts
+
+    def check_cert_verify_and_get_data(self, s):
+        """
+        :param s: socket to recieve data
+        :return: the recieved data
+        """
+        cert_dict = {}
+        data, address, rootCA_auth_opts = self.receive_offer(s)
+        rootCA_cert = self.get_cert(rootCA_auth_opts)
+        cert_dict[DHCPauthType.CA] = rootCA_cert
+        data, address, domain_auth_opts = self.receive_offer(s)
+        domain_cert = self.get_cert(domain_auth_opts)
+        cert_dict[DHCPauthType.SERVER] = domain_cert
+
+        print(cert_dict)
+
+        print("Checking cert validity...")
+
+        if not verify_certificate_chain(cert_dict[DHCPauthType.SERVER], [cert_dict[DHCPauthType.CA]]):
+            print("Cert invalid!")
+            sys.exit(1)
+
+        return data, address
 
     def get_auth_opt(self, data):
         origin_msg = data[:267]
