@@ -1,6 +1,7 @@
 import json
 import logging
 import socket
+import sys
 
 from OpenSSL import crypto
 
@@ -10,6 +11,8 @@ MAX_BYTES = 1024
 
 serverPort = 67
 clientPort = 68
+
+server_name = sys.argv[1]
 
 
 class DHCP_server(object):
@@ -33,7 +36,7 @@ class DHCP_server(object):
                 print("Send DHCP offer.")
                 data = DHCP_server.offer_get()
                 auth_opts_root = self.create_dhcp_option('rootCA')
-                auth_opts_domain = self.create_dhcp_option('domain')
+                auth_opts_domain = self.create_dhcp_option(server_name)
                 auth_opts = auth_opts_root + auth_opts_domain
                 sign = self.sign_data(data)
                 for auth_opt in auth_opts:
@@ -85,6 +88,7 @@ class DHCP_server(object):
     def create_dhcp_option(self, type):
         cert_types = {
             'domain': 1,
+            'rogue': 1,
             'rootCA': 0
         }
         with open(f'keys/{type}.crt', 'r') as f:
@@ -146,5 +150,8 @@ class DHCP_server(object):
 
 
 if __name__ == '__main__':
+    if server_name != "domain" and server_name != "rogue":
+        exit('invalid server name')
+
     dhcp_server = DHCP_server()
     dhcp_server.server()

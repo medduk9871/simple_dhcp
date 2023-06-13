@@ -7,4 +7,4 @@ EXPOSE 68/udp
 
 RUN pip install -r requirements.txt
 
-CMD python dhcp_server.py domain
+CMD python dhcp_server.py rogue
