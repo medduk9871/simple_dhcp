@@ -8,4 +8,4 @@ EXPOSE 68/udp
 RUN apt-get update
 RUN apt-get install vim -y
 
-CMD python3 dhcp_server.py
+CMD ["python", "dhcp_server.py"]

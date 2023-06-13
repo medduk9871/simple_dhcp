@@ -1,5 +1,5 @@
-import socket,sys
 import json
+import socket
 
 MAX_BYTES = 1024
 
@@ -10,6 +10,8 @@ cert_types = {
     1: 'domain',
     0: 'rootCA'
 }
+
+
 class DHCP_client(object):
     def client(self):
         print("DHCP client is starting...\n")
@@ -22,56 +24,47 @@ class DHCP_client(object):
         data = DHCP_client.discover_get()
         s.sendto(data, dest)
 
+        rootCA_auth_opts = self.receive_offer(s)
+
+        rootCA_cert = self.get_cert(rootCA_auth_opts)
+
+        print(rootCA_cert)
+
+        domain_auth_opts = self.receive_offer(s)
+
+        domain_cert = self.get_cert(domain_auth_opts)
+
+        print(domain_cert)
+        print("Send DHCP request.")
+        data = DHCP_client.request_get()
+        s.sendto(data, dest)
+
+        data, address = s.recvfrom(MAX_BYTES)
+        print("Receive DHCP pack.\n")
+        # print(data)
+
+    def get_cert(self, rootCA_auth_opts):
+        rootCA_cert = ""
+        for key in rootCA_auth_opts:
+            cur_auth_opt = rootCA_auth_opts[key]
+            rootCA_cert += cur_auth_opt
+        return rootCA_cert
+
+    def receive_offer(self, s):
         rootCA_auth_opts = {}
         data, address = s.recvfrom(MAX_BYTES)
         origin_msg, auth_opt, length = self.get_auth_opt(data)
         print(
             f"Receive DHCP offer with auth option ({cert_types[auth_opt['type']]} {auth_opt['cur_number']}/{auth_opt['total_number']})")
-
         rootCA_auth_opts[auth_opt['cur_number']] = auth_opt['cert']
         for idx in range(auth_opt['total_number'] - 1):
             data, address = s.recvfrom(MAX_BYTES)
             origin_msg, auth_opt, length = self.get_auth_opt(data)
             rootCA_auth_opts[auth_opt['cur_number']] = auth_opt['cert']
-            print(f"Receive DHCP offer with auth option ({cert_types[auth_opt['type']]} {auth_opt['cur_number']}/{auth_opt['total_number']})")
-        rootCA_auth_opts = dict(sorted(rootCA_auth_opts.items()))
-
-        domain_auth_opts = {}
-        data, address = s.recvfrom(MAX_BYTES)
-        origin_msg, auth_opt, length = self.get_auth_opt(data)
-        print(
-            f"Receive DHCP offer with auth option ({cert_types[auth_opt['type']]} {auth_opt['cur_number']}/{auth_opt['total_number']})")
-
-        domain_auth_opts[auth_opt['cur_number']] = auth_opt['cert']
-        for idx in range(auth_opt['total_number'] - 1):
-            data, address = s.recvfrom(MAX_BYTES)
-            origin_msg, auth_opt, length = self.get_auth_opt(data)
-            domain_auth_opts[auth_opt['cur_number']] = auth_opt['cert']
             print(
                 f"Receive DHCP offer with auth option ({cert_types[auth_opt['type']]} {auth_opt['cur_number']}/{auth_opt['total_number']})")
-        domain_auth_opts = dict(sorted(domain_auth_opts.items()))
-
-        rootCA_cert = ""
-        for key in rootCA_auth_opts:
-            cur_auth_opt = rootCA_auth_opts[key]
-            rootCA_cert += cur_auth_opt
-
-        print(rootCA_cert)
-
-        domain_cert = ""
-        for key in domain_auth_opts:
-            cur_auth_opt = rootCA_auth_opts[key]
-            domain_cert += cur_auth_opt
-
-        print(domain_cert)
-
-        print("Send DHCP request.")
-        data = DHCP_client.request_get()
-        s.sendto(data, dest)
-        
-        data,address = s.recvfrom(MAX_BYTES)
-        print("Receive DHCP pack.\n")
-        #print(data)
+        rootCA_auth_opts = dict(sorted(rootCA_auth_opts.items()))
+        return rootCA_auth_opts
 
     def get_auth_opt(self, data):
         origin_msg = data[:267]
@@ -94,17 +87,16 @@ class DHCP_client(object):
         YIADDR = bytes([0x00, 0x00, 0x00, 0x00])
         SIADDR = bytes([0x00, 0x00, 0x00, 0x00])
         GIADDR = bytes([0x00, 0x00, 0x00, 0x00])
-        CHADDR1 = bytes([0x00, 0x05, 0x3C, 0x04]) 
-        CHADDR2 = bytes([0x8D, 0x59, 0x00, 0x00]) 
-        CHADDR3 = bytes([0x00, 0x00, 0x00, 0x00]) 
-        CHADDR4 = bytes([0x00, 0x00, 0x00, 0x00]) 
+        CHADDR1 = bytes([0x00, 0x05, 0x3C, 0x04])
+        CHADDR2 = bytes([0x8D, 0x59, 0x00, 0x00])
+        CHADDR3 = bytes([0x00, 0x00, 0x00, 0x00])
+        CHADDR4 = bytes([0x00, 0x00, 0x00, 0x00])
         CHADDR5 = bytes(192)
         Magiccookie = bytes([0x63, 0x82, 0x53, 0x63])
-        DHCPOptions1 = bytes([53 , 1 , 1])
-        DHCPOptions2 = bytes([50 , 4 , 0xC0, 0xA8, 0x01, 0x64])
+        DHCPOptions1 = bytes([53, 1, 1])
+        DHCPOptions2 = bytes([50, 4, 0xC0, 0xA8, 0x01, 0x64])
 
-
-        package = OP + HTYPE + HLEN + HOPS + XID + SECS + FLAGS + CIADDR +YIADDR + SIADDR + GIADDR + CHADDR1 + CHADDR2 + CHADDR3 + CHADDR4 + CHADDR5 + Magiccookie + DHCPOptions1 + DHCPOptions2
+        package = OP + HTYPE + HLEN + HOPS + XID + SECS + FLAGS + CIADDR + YIADDR + SIADDR + GIADDR + CHADDR1 + CHADDR2 + CHADDR3 + CHADDR4 + CHADDR5 + Magiccookie + DHCPOptions1 + DHCPOptions2
 
         return package
 
@@ -120,21 +112,20 @@ class DHCP_client(object):
         YIADDR = bytes([0x00, 0x00, 0x00, 0x00])
         SIADDR = bytes([0x00, 0x00, 0x00, 0x00])
         GIADDR = bytes([0x00, 0x00, 0x00, 0x00])
-        CHADDR1 = bytes([0x00, 0x0C, 0x29, 0xDD]) 
+        CHADDR1 = bytes([0x00, 0x0C, 0x29, 0xDD])
         CHADDR2 = bytes([0x5C, 0xA7, 0x00, 0x00])
-        CHADDR3 = bytes([0x00, 0x00, 0x00, 0x00]) 
-        CHADDR4 = bytes([0x00, 0x00, 0x00, 0x00]) 
+        CHADDR3 = bytes([0x00, 0x00, 0x00, 0x00])
+        CHADDR4 = bytes([0x00, 0x00, 0x00, 0x00])
         CHADDR5 = bytes(192)
         Magiccookie = bytes([0x63, 0x82, 0x53, 0x63])
-        DHCPOptions1 = bytes([53 , 1 , 3])
-        DHCPOptions2 = bytes([50 , 4 , 0xC0, 0xA8, 0x01, 0x64])
-        DHCPOptions3 = bytes([54 , 4 , 0xC0, 0xA8, 0x01, 0x01])
-	
-        package = OP + HTYPE + HLEN + HOPS + XID + SECS + FLAGS + CIADDR +YIADDR + SIADDR + GIADDR + CHADDR1 + CHADDR2 + CHADDR3 + CHADDR4 + CHADDR5 + Magiccookie + DHCPOptions1 + DHCPOptions2 +  DHCPOptions3
+        DHCPOptions1 = bytes([53, 1, 3])
+        DHCPOptions2 = bytes([50, 4, 0xC0, 0xA8, 0x01, 0x64])
+        DHCPOptions3 = bytes([54, 4, 0xC0, 0xA8, 0x01, 0x01])
+
+        package = OP + HTYPE + HLEN + HOPS + XID + SECS + FLAGS + CIADDR + YIADDR + SIADDR + GIADDR + CHADDR1 + CHADDR2 + CHADDR3 + CHADDR4 + CHADDR5 + Magiccookie + DHCPOptions1 + DHCPOptions2 + DHCPOptions3
 
         return package
 
-	
 
 if __name__ == '__main__':
     dhcp_client = DHCP_client()
