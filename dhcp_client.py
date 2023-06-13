@@ -3,6 +3,7 @@ import socket
 import sys
 
 from cert_verify import verify_certificate_chain
+from OpenSSL import crypto
 
 MAX_BYTES = 1024
 
@@ -53,18 +54,18 @@ class DHCP_client(object):
     def receive_offer(self, s):
         rootCA_auth_opts = {}
         data, address = s.recvfrom(MAX_BYTES)
-        origin_msg, auth_opt, length = self.get_auth_opt(data)
+        origin_msg, auth_opt, length, signature = self.get_auth_opt(data)
         print(
             f"Receive DHCP offer with auth option ({cert_types[auth_opt['type']]} {auth_opt['cur_number']}/{auth_opt['total_number']})")
         rootCA_auth_opts[auth_opt['cur_number']] = auth_opt['cert']
         for idx in range(auth_opt['total_number'] - 1):
             data, address = s.recvfrom(MAX_BYTES)
-            origin_msg, auth_opt, length = self.get_auth_opt(data)
+            origin_msg, auth_opt, length, signature = self.get_auth_opt(data)
             rootCA_auth_opts[auth_opt['cur_number']] = auth_opt['cert']
             print(
                 f"Receive DHCP offer with auth option ({cert_types[auth_opt['type']]} {auth_opt['cur_number']}/{auth_opt['total_number']})")
         rootCA_auth_opts = dict(sorted(rootCA_auth_opts.items()))
-        return data, address, rootCA_auth_opts
+        return data, address, rootCA_auth_opts, signature
 
     def check_cert_verify_and_get_data(self, s):
         """
@@ -72,10 +73,10 @@ class DHCP_client(object):
         :return: the recieved data
         """
         cert_dict = {}
-        data, address, rootCA_auth_opts = self.receive_offer(s)
+        data, address, rootCA_auth_opts, signature = self.receive_offer(s)
         rootCA_cert = self.get_cert(rootCA_auth_opts)
         cert_dict[DHCPauthType.CA] = rootCA_cert
-        data, address, domain_auth_opts = self.receive_offer(s)
+        data, address, domain_auth_opts, signature = self.receive_offer(s)
         domain_cert = self.get_cert(domain_auth_opts)
         cert_dict[DHCPauthType.SERVER] = domain_cert
 
@@ -87,16 +88,24 @@ class DHCP_client(object):
             print("Cert invalid!")
             sys.exit(1)
 
+        crtObj = crypto.load_certificate(crypto.FILETYPE_PEM, cert_dict[DHCPauthType.SERVER])
+        pubKeyObject = crtObj.get_pubkey()
+        pubKeyString = crypto.dump_publickey(crypto.FILETYPE_PEM, pubKeyObject)
+        if not crypto.verify(crtObj, signature, data, 'sha256'):
+            print("Signature invalid!")
+            sys.exit(1)
+
         return data, address
 
     def get_auth_opt(self, data):
         origin_msg = data[:267]
         auth_opt = data[267:]
         length = 256 * auth_opt[0] + auth_opt[1]
-        auth_opt_body = auth_opt[2:]
+        auth_opt_body = auth_opt[2:-256]
+        signature = auth_opt_body[-256:]
         # json to dict
         di = eval(str(auth_opt_body))
-        return origin_msg, json.loads(di.decode('utf-8')), length
+        return origin_msg, json.loads(di.decode('utf-8')), length, signature
 
     def discover_get():
         OP = bytes([0x01])
