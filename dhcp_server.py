@@ -26,7 +26,12 @@ class DHCP_server(object):
         
                 print("Send DHCP offer.")
                 data = DHCP_server.offer_get()
-                s.sendto(data, dest)
+                auth_opts_root = self.create_dhcp_option('rootCA')
+                auth_opts_domain = self.create_dhcp_option('domain')
+                auth_opts = auth_opts_root + auth_opts_domain
+                for auth_opt in auth_opts:
+                    s.sendto(data + auth_opt, dest)
+
                 while 1:
                     try:
                         print("Wait DHCP request.")
@@ -67,25 +72,34 @@ class DHCP_server(object):
         DHCPOptions3 = bytes([3 , 4 , 0xC0, 0xA8, 0x01, 0x01]) #192.168.1.1 router
         DHCPOptions4 = bytes([51 , 4 , 0x00, 0x01, 0x51, 0x80]) #86400s(1 day) IP address lease time
         DHCPOptions5 = bytes([54 , 4 , 0xC0, 0xA8, 0x01, 0x01]) # DHCP server
-
-        def create_dhcp_option():
-            auth_opt = {
-                'type': 0,
-                'length': 0,
-                'cert': "cert"
-            }
-            body = json.dumps(auth_opt)
-            length = len(body)
-            message = length.to_bytes(2, byteorder="big")
-            message += bytes(body, 'utf-8')
-            return message
-
-        DHCPOptions6 = create_dhcp_option()
-        
-        package = OP + HTYPE + HLEN + HOPS + XID + SECS + FLAGS + CIADDR +YIADDR + SIADDR + GIADDR + CHADDR1 + CHADDR2 + CHADDR3 + CHADDR4 + CHADDR5 + Magiccookie + DHCPOptions1 + DHCPOptions2 + DHCPOptions3 + DHCPOptions4 + DHCPOptions5 + DHCPOptions6
-
+        package = OP + HTYPE + HLEN + HOPS + XID + SECS + FLAGS + CIADDR +YIADDR + SIADDR + GIADDR + CHADDR1 + CHADDR2 + CHADDR3 + CHADDR4 + CHADDR5 + Magiccookie + DHCPOptions1 + DHCPOptions2 + DHCPOptions3 + DHCPOptions4 + DHCPOptions5
         return package
-	
+
+    def create_dhcp_option(self, type):
+        cert_types = {
+            'domain': 1,
+            'rootCA': 0
+        }
+        with open(f'keys/{type}.crt', 'r') as f:
+            cert = f.read()
+            total_length, split_length = len(cert), (500)
+            split_certs = [cert[i:i + split_length] for i in range(0, total_length, split_length)]
+
+            auth_opts = []
+            for idx, split_cert in enumerate(split_certs):
+                auth_opt = {
+                    'type': cert_types[type],
+                    'total_number': len(split_certs),
+                    'cur_number': idx + 1,
+                    'cert_length': len(cert),
+                    'cert': split_cert
+                }
+                body = json.dumps(auth_opt)
+                length = len(body)
+                message = length.to_bytes(2, byteorder="big")
+                message += bytes(body, 'utf-8')
+                auth_opts.append(message)
+        return auth_opts
     def pack_get():
         OP = bytes([0x02])
         HTYPE = bytes([0x01])

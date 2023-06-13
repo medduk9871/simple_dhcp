@@ -1,10 +1,15 @@
 import socket,sys
+import json
 
 MAX_BYTES = 1024
 
 serverPort = 67
 clientPort = 68
 
+cert_types = {
+    1: 'domain',
+    0: 'rootCA'
+}
 class DHCP_client(object):
     def client(self):
         print("DHCP client is starting...\n")
@@ -14,16 +19,51 @@ class DHCP_client(object):
         s.bind(('0.0.0.0', clientPort))
 
         print("Send DHCP discovery.")
-        data = DHCP_client.discover_get();
+        data = DHCP_client.discover_get()
         s.sendto(data, dest)
-        
-        data, address = s.recvfrom(MAX_BYTES)
-        print("Receive DHCP offer.")
-        #print(data)
-        origin_msg, auth_opt, length = self.get_auth_opt(data)
 
-        print("auth_opt_len: ", length)
-        print("auth_opt : ", auth_opt)
+        rootCA_auth_opts = {}
+        data, address = s.recvfrom(MAX_BYTES)
+        origin_msg, auth_opt, length = self.get_auth_opt(data)
+        print(
+            f"Receive DHCP offer with auth option ({cert_types[auth_opt['type']]} {auth_opt['cur_number']}/{auth_opt['total_number']})")
+
+        rootCA_auth_opts[auth_opt['cur_number']] = auth_opt['cert']
+        for idx in range(auth_opt['total_number'] - 1):
+            data, address = s.recvfrom(MAX_BYTES)
+            origin_msg, auth_opt, length = self.get_auth_opt(data)
+            rootCA_auth_opts[auth_opt['cur_number']] = auth_opt['cert']
+            print(f"Receive DHCP offer with auth option ({cert_types[auth_opt['type']]} {auth_opt['cur_number']}/{auth_opt['total_number']})")
+        rootCA_auth_opts = dict(sorted(rootCA_auth_opts.items()))
+
+        domain_auth_opts = {}
+        data, address = s.recvfrom(MAX_BYTES)
+        origin_msg, auth_opt, length = self.get_auth_opt(data)
+        print(
+            f"Receive DHCP offer with auth option ({cert_types[auth_opt['type']]} {auth_opt['cur_number']}/{auth_opt['total_number']})")
+
+        domain_auth_opts[auth_opt['cur_number']] = auth_opt['cert']
+        for idx in range(auth_opt['total_number'] - 1):
+            data, address = s.recvfrom(MAX_BYTES)
+            origin_msg, auth_opt, length = self.get_auth_opt(data)
+            domain_auth_opts[auth_opt['cur_number']] = auth_opt['cert']
+            print(
+                f"Receive DHCP offer with auth option ({cert_types[auth_opt['type']]} {auth_opt['cur_number']}/{auth_opt['total_number']})")
+        domain_auth_opts = dict(sorted(domain_auth_opts.items()))
+
+        rootCA_cert = ""
+        for key in rootCA_auth_opts:
+            cur_auth_opt = rootCA_auth_opts[key]
+            rootCA_cert += cur_auth_opt
+
+        print(rootCA_cert)
+
+        domain_cert = ""
+        for key in domain_auth_opts:
+            cur_auth_opt = rootCA_auth_opts[key]
+            domain_cert += cur_auth_opt
+
+        print(domain_cert)
 
         print("Send DHCP request.")
         data = DHCP_client.request_get()
@@ -40,7 +80,7 @@ class DHCP_client(object):
         auth_opt_body = auth_opt[2:]
         # json to dict
         di = eval(str(auth_opt_body))
-        return origin_msg, di.decode('utf-8'), length
+        return origin_msg, json.loads(di.decode('utf-8')), length
 
     def discover_get():
         OP = bytes([0x01])
