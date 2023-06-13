@@ -4,16 +4,16 @@ MAX_BYTES = 1024
 serverPort = 67
 clientPort = 68
 CERT_SPLIT_LENGTH = 400
-SIGNATURE_LENGTH = 256 # must be 256 or 512, which have to be suffix for sha{SIGNATURE_LENGTH}
+SIGNATURE_LENGTH = 256  # must be 256 or 512, which have to be suffix for sha{SIGNATURE_LENGTH}
 
 cert_types = {
     'domain': 1,
-    'rootCA': 0,
+    'issuerCA': 0,
     'rogue': 1,
     1: 'domain',
-    0: 'rootCA'
+    0: 'issuerCA'
 }
-from collections import defaultdict
+
 
 def default_parse(data):
     return '.'.join([str(s) for s in list(data)])
@@ -22,6 +22,7 @@ def default_parse(data):
 class Option:
     options_dict = {}
     _n_bytes_for_option_len = 1
+
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
         cls.options_dict[cls.get_option_no()] = cls
@@ -46,13 +47,16 @@ class Option:
             return cls.get_option_cls(option_no).parse(data)
         return default_parse(data)
 
+
 class Option51(Option):
     @classmethod
     def parse(cls, data):
         return int.from_bytes(data, 'big')
 
+
 class Option90(Option):
     _n_bytes_for_option_len = 2
+
     @classmethod
     def parse(cls, data):
         import json
@@ -99,11 +103,11 @@ class DHCPMessage:
                 yield orig_data[:total_len]
                 yield_orig_data_before_option_no.pop(0)
             len_bytes_len = Option.n_bytes_for_option_len(option_no)
-            option_length = int.from_bytes(data[1:1+len_bytes_len], 'big')
-            option_data = data[1+len_bytes_len:1+len_bytes_len+option_length]
+            option_length = int.from_bytes(data[1:1 + len_bytes_len], 'big')
+            option_data = data[1 + len_bytes_len:1 + len_bytes_len + option_length]
             data_dict[option_no] = Option.parse(option_no, option_data)
-            data = data[1+len_bytes_len+option_length:]
-            total_len += 1+len_bytes_len+option_length
+            data = data[1 + len_bytes_len + option_length:]
+            total_len += 1 + len_bytes_len + option_length
 
         yield data_dict
 

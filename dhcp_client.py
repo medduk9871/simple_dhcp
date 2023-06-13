@@ -1,4 +1,3 @@
-import json
 import socket
 import sys
 
@@ -32,12 +31,12 @@ class DHCP_client(object):
         expire_days = data[Option51.get_option_no()]
         print(f"Recieved IP: {got_ip}. It will expire in {expire_days} days.")
 
-    def get_cert(self, rootCA_auth_opts):
-        rootCA_cert = ""
-        for key in rootCA_auth_opts:
-            cur_auth_opt = rootCA_auth_opts[key]
-            rootCA_cert += cur_auth_opt
-        return rootCA_cert
+    def get_cert(self, issuerCA_auth_opts):
+        issuerCA_cert = ""
+        for key in issuerCA_auth_opts:
+            cur_auth_opt = issuerCA_auth_opts[key]
+            issuerCA_cert += cur_auth_opt
+        return issuerCA_cert
 
     def receive_offer(self, s):
         auth_opts = {}
@@ -72,7 +71,7 @@ class DHCP_client(object):
         cert_dict[auth_opt['type']] = cert
 
         print("Checking cert validity...")
-        if not verify_certificate_chain(cert_dict[cert_types['domain']], [cert_dict[cert_types['rootCA']]]):
+        if not verify_certificate_chain(cert_dict[cert_types['domain']], [cert_dict[cert_types['issuerCA']]]):
             print("Cert invalid!")
             sys.exit(1)
         print("Cert Valid!")

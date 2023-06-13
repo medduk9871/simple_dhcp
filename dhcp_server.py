@@ -5,11 +5,13 @@ import sys
 
 from OpenSSL import crypto
 
-from common import MAX_BYTES, serverPort, clientPort, CERT_SPLIT_LENGTH, SIGNATURE_LENGTH, cert_types, DHCPMessage, Option90
+from common import MAX_BYTES, serverPort, clientPort, CERT_SPLIT_LENGTH, SIGNATURE_LENGTH, cert_types, DHCPMessage, \
+    Option90
 
 logger = logging.getLogger(__name__)
 
 server_name = sys.argv[1]
+
 
 class DHCP_server(object):
 
@@ -31,12 +33,13 @@ class DHCP_server(object):
 
                 print("Send DHCP offer.")
                 data = DHCP_server.offer_get()
-                auth_opts_root = self.create_dhcp_option('rootCA')
+                auth_opts_root = self.create_dhcp_option('issuerCA')
                 auth_opts_domain = self.create_dhcp_option(server_name)
                 auth_opts = auth_opts_root + auth_opts_domain
                 sign = self.sign_data(data)
                 for auth_opt in auth_opts:
-                    opt = DHCPMessage.change_to_bytes(Option90.get_option_no(), 1) + DHCPMessage.change_to_bytes(len(sign + auth_opt), Option90._n_bytes_for_option_len)
+                    opt = DHCPMessage.change_to_bytes(Option90.get_option_no(), 1) + DHCPMessage.change_to_bytes(
+                        len(sign + auth_opt), Option90._n_bytes_for_option_len)
                     new_data = DHCPMessage.add_option(data, opt + sign + auth_opt)
                     s.sendto(new_data, dest)
 
@@ -51,8 +54,9 @@ class DHCP_server(object):
                         data = DHCP_server.pack_get()
                         sign = self.sign_data(data)
                         for auth_opt in auth_opts:
-                            opt = DHCPMessage.change_to_bytes(Option90.get_option_no(), 1) + DHCPMessage.change_to_bytes(len(sign + auth_opt),
-                                                                                                                         Option90._n_bytes_for_option_len)
+                            opt = DHCPMessage.change_to_bytes(Option90.get_option_no(),
+                                                              1) + DHCPMessage.change_to_bytes(len(sign + auth_opt),
+                                                                                               Option90._n_bytes_for_option_len)
                             new_data = DHCPMessage.add_option(data, opt + sign + auth_opt)
                             s.sendto(new_data, dest)
                         # s.sendto(data, dest)
@@ -82,7 +86,8 @@ class DHCP_server(object):
         package = DHCPMessage.add_option(package, [53, 1, 2])  # DHCP Offer
         package = DHCPMessage.add_option(package, [1, 4, 0xFF, 0xFF, 0xFF, 0x00])  # 255.255.255.0 subnet mask
         package = DHCPMessage.add_option(package, [3, 4, 0xC0, 0xA8, 0x01, 0x01])  # 192.168.1.1 router
-        package = DHCPMessage.add_option(package, [51, 4, 0x00, 0x01, 0x51, 0x80])  # 86400s(1 day) IP address lease time
+        package = DHCPMessage.add_option(package,
+                                         [51, 4, 0x00, 0x01, 0x51, 0x80])  # 86400s(1 day) IP address lease time
         package = DHCPMessage.add_option(package, [54, 4, 0xC0, 0xA8, 0x01, 0x01])  # DHCP server
         return package
 

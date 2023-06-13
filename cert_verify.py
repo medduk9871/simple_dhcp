@@ -32,7 +32,7 @@ def verify_certificate_chain(cert_data, trusted_cert_datas):
 if __name__ == "__main__":
     for crt_name in ['domain.crt', 'rogue.crt']:
         cert_path = os.path.join("keys", crt_name)
-        trusted_certs = [os.path.join("keys", "rootCA.crt")]
+        trusted_certs = [os.path.join("keys", "issuerCA.crt")]
 
         if not verify_certificate_chain(cert_path, trusted_certs):
             print(f"{crt_name}: Invalid certificate!")
