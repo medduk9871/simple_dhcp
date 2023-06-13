@@ -5,6 +5,8 @@ import sys
 
 from OpenSSL import crypto
 
+from common import MAX_BYTES, serverPort, clientPort, CERT_SPLIT_LENGTH, SIGNATURE_LENGTH
+
 logger = logging.getLogger(__name__)
 
 MAX_BYTES = 1024
@@ -51,7 +53,10 @@ class DHCP_server(object):
 
                         print("Send DHCP pack.\n")
                         data = DHCP_server.pack_get()
-                        s.sendto(data, dest)
+                        sign = self.sign_data(data)
+                        for auth_opt in auth_opts:
+                            s.sendto(data + sign + auth_opt, dest)
+                        # s.sendto(data, dest)
                         break
                     except:
                         raise
@@ -59,7 +64,6 @@ class DHCP_server(object):
                 raise
 
     def offer_get():
-
         OP = bytes([0x02])
         HTYPE = bytes([0x01])
         HLEN = bytes([0x06])
@@ -93,7 +97,7 @@ class DHCP_server(object):
         }
         with open(f'keys/{type}.crt', 'r') as f:
             cert = f.read()
-            total_length, split_length = len(cert), (400)
+            total_length, split_length = len(cert), CERT_SPLIT_LENGTH
             split_certs = [cert[i:i + split_length] for i in range(0, total_length, split_length)]
 
             auth_opts = []
@@ -116,7 +120,7 @@ class DHCP_server(object):
             private_key = f.read()
             password = bytes('abcd', 'utf-8')
             pkey = crypto.load_privatekey(crypto.FILETYPE_PEM, private_key, password)
-            sign = crypto.sign(pkey, data, "sha256")
+            sign = crypto.sign(pkey, data, f"sha{SIGNATURE_LENGTH}")
             print(sign)
             return sign
 

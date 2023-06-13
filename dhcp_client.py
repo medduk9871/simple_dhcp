@@ -5,11 +5,7 @@ import sys
 from OpenSSL import crypto
 
 from cert_verify import verify_certificate_chain
-
-MAX_BYTES = 1024
-
-serverPort = 67
-clientPort = 68
+from common import MAX_BYTES, serverPort, clientPort, CERT_SPLIT_LENGTH, SIGNATURE_LENGTH
 
 cert_types = {
     1: 'domain',
@@ -81,25 +77,27 @@ class DHCP_client(object):
         domain_cert = self.get_cert(domain_auth_opts)
         cert_dict[DHCPauthType.SERVER] = domain_cert
 
-        print(cert_dict)
-
         print("Checking cert validity...")
-
         if not verify_certificate_chain(cert_dict[DHCPauthType.SERVER], [cert_dict[DHCPauthType.CA]]):
             print("Cert invalid!")
             sys.exit(1)
+        print("Cert Valid!")
 
+        print("Checking signature validity...")
         crtObj = crypto.load_certificate(crypto.FILETYPE_PEM, cert_dict[DHCPauthType.SERVER])
-        if not crypto.verify(crtObj, signature, data, 'sha256'):
+        try:
+            crypto.verify(crtObj, signature, data, f'sha{SIGNATURE_LENGTH}')
+        except Exception as e:
             print("Signature invalid!")
             sys.exit(1)
+        print("Signature Valid!")
 
         return data, address
 
     def get_auth_opt(self, data):
         origin_msg = data[:267]
-        sign = data[267: 267 + 256]
-        auth_opt = data[267 + 256:]
+        sign = data[267: 267 + SIGNATURE_LENGTH]
+        auth_opt = data[267 + SIGNATURE_LENGTH:]
         auth_opt_body = auth_opt
         # json to dict
         di = eval(str(auth_opt_body))
