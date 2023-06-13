@@ -5,18 +5,7 @@ import sys
 from OpenSSL import crypto
 
 from cert_verify import verify_certificate_chain
-from common import MAX_BYTES, serverPort, clientPort, CERT_SPLIT_LENGTH, SIGNATURE_LENGTH
-
-cert_types = {
-    1: 'domain',
-    0: 'rootCA'
-}
-from enum import Enum
-
-
-class DHCPauthType(Enum):
-    CA = 0
-    SERVER = 1
+from common import MAX_BYTES, serverPort, clientPort, SIGNATURE_LENGTH, cert_types, DHCPMessage, Option90, Option51
 
 
 class DHCP_client(object):
@@ -39,7 +28,9 @@ class DHCP_client(object):
 
         data, address = self.check_cert_verify_and_get_data(s)
         print("Receive DHCP pack.\n")
-        # print(data)
+        got_ip = data['YIADDR']
+        expire_days = data[Option51.get_option_no()]
+        print(f"Recieved IP: {got_ip}. It will expire in {expire_days} days.")
 
     def get_cert(self, rootCA_auth_opts):
         rootCA_cert = ""
@@ -49,20 +40,23 @@ class DHCP_client(object):
         return rootCA_cert
 
     def receive_offer(self, s):
-        rootCA_auth_opts = {}
+        auth_opts = {}
         data, address = s.recvfrom(MAX_BYTES)
-        origin_msg, auth_opt, signature = self.get_auth_opt(data)
+        signed_raw, full_data_dict = self.get_auth_opt(data)
+        auth_opt = full_data_dict[Option90.get_option_no()]
         print(
             f"Receive DHCP offer with auth option ({cert_types[auth_opt['type']]} {auth_opt['cur_number']}/{auth_opt['total_number']})")
-        rootCA_auth_opts[auth_opt['cur_number']] = auth_opt['cert']
+        auth_opts[auth_opt['cur_number']] = auth_opt['cert']
         for idx in range(auth_opt['total_number'] - 1):
             data, address = s.recvfrom(MAX_BYTES)
-            origin_msg, auth_opt, signature = self.get_auth_opt(data)
-            rootCA_auth_opts[auth_opt['cur_number']] = auth_opt['cert']
+            signed_raw, full_data_dict = self.get_auth_opt(data)
+            auth_opt = full_data_dict[Option90.get_option_no()]
+            auth_opts[auth_opt['cur_number']] = auth_opt['cert']
             print(
                 f"Receive DHCP offer with auth option ({cert_types[auth_opt['type']]} {auth_opt['cur_number']}/{auth_opt['total_number']})")
-        rootCA_auth_opts = dict(sorted(rootCA_auth_opts.items()))
-        return origin_msg, address, rootCA_auth_opts, signature
+        auth_opts = dict(sorted(auth_opts.items()))
+        cert = self.get_cert(auth_opts)
+        return signed_raw, address, full_data_dict, cert
 
     def check_cert_verify_and_get_data(self, s):
         """
@@ -70,87 +64,78 @@ class DHCP_client(object):
         :return: the recieved data
         """
         cert_dict = {}
-        data, address, rootCA_auth_opts, signature = self.receive_offer(s)
-        rootCA_cert = self.get_cert(rootCA_auth_opts)
-        cert_dict[DHCPauthType.CA] = rootCA_cert
-        data, address, domain_auth_opts, signature = self.receive_offer(s)
-        domain_cert = self.get_cert(domain_auth_opts)
-        cert_dict[DHCPauthType.SERVER] = domain_cert
+        signed_data, address, full_data_dict, cert = self.receive_offer(s)
+        auth_opt = full_data_dict[Option90.get_option_no()]
+        cert_dict[auth_opt['type']] = cert
+        signed_data, address, full_data_dict, cert = self.receive_offer(s)
+        auth_opt = full_data_dict[Option90.get_option_no()]
+        cert_dict[auth_opt['type']] = cert
 
         print("Checking cert validity...")
-        if not verify_certificate_chain(cert_dict[DHCPauthType.SERVER], [cert_dict[DHCPauthType.CA]]):
+        if not verify_certificate_chain(cert_dict[cert_types['domain']], [cert_dict[cert_types['rootCA']]]):
             print("Cert invalid!")
             sys.exit(1)
         print("Cert Valid!")
 
         print("Checking signature validity...")
-        crtObj = crypto.load_certificate(crypto.FILETYPE_PEM, cert_dict[DHCPauthType.SERVER])
+        crtObj = crypto.load_certificate(crypto.FILETYPE_PEM, cert_dict[cert_types['domain']])
         try:
-            crypto.verify(crtObj, signature, data, f'sha{SIGNATURE_LENGTH}')
+            crypto.verify(crtObj, auth_opt['signature'], signed_data, f'sha{SIGNATURE_LENGTH}')
         except Exception as e:
             print("Signature invalid!")
+            print(e)
             sys.exit(1)
         print("Signature Valid!")
 
-        return data, address
+        return full_data_dict, address
 
     def get_auth_opt(self, data):
-        origin_msg = data[:267]
-        sign = data[267: 267 + SIGNATURE_LENGTH]
-        auth_opt = data[267 + SIGNATURE_LENGTH:]
-        auth_opt_body = auth_opt
-        # json to dict
-        di = eval(str(auth_opt_body))
-        return origin_msg, json.loads(di.decode('utf-8')), sign
+        option_no = Option90.get_option_no()
+        signed_raw_data, full_data = list(DHCPMessage.parse(data, [option_no]))
+        return signed_raw_data, full_data
 
     def discover_get():
-        OP = bytes([0x01])
-        HTYPE = bytes([0x01])
-        HLEN = bytes([0x06])
-        HOPS = bytes([0x00])
-        XID = bytes([0x39, 0x03, 0xF3, 0x26])
-        SECS = bytes([0x00, 0x00])
-        FLAGS = bytes([0x00, 0x00])
-        CIADDR = bytes([0x00, 0x00, 0x00, 0x00])
-        YIADDR = bytes([0x00, 0x00, 0x00, 0x00])
-        SIADDR = bytes([0x00, 0x00, 0x00, 0x00])
-        GIADDR = bytes([0x00, 0x00, 0x00, 0x00])
-        CHADDR1 = bytes([0x00, 0x05, 0x3C, 0x04])
-        CHADDR2 = bytes([0x8D, 0x59, 0x00, 0x00])
-        CHADDR3 = bytes([0x00, 0x00, 0x00, 0x00])
-        CHADDR4 = bytes([0x00, 0x00, 0x00, 0x00])
-        CHADDR5 = bytes(192)
-        Magiccookie = bytes([0x63, 0x82, 0x53, 0x63])
-        DHCPOptions1 = bytes([53, 1, 1])
-        DHCPOptions2 = bytes([50, 4, 0xC0, 0xA8, 0x01, 0x64])
-
-        package = OP + HTYPE + HLEN + HOPS + XID + SECS + FLAGS + CIADDR + YIADDR + SIADDR + GIADDR + CHADDR1 + CHADDR2 + CHADDR3 + CHADDR4 + CHADDR5 + Magiccookie + DHCPOptions1 + DHCPOptions2
+        package = DHCPMessage.make_bytes(dict(OP=[0x01]
+                                              , HTYPE=[0x01]
+                                              , HLEN=[0x06]
+                                              , HOPS=[0x00]
+                                              , XID=[0x39, 0x03, 0xF3, 0x26]
+                                              , SECS=[0x00, 0x00]
+                                              , FLAGS=[0x00, 0x00]
+                                              , CIADDR=[0x00, 0x00, 0x00, 0x00]
+                                              , YIADDR=[0x00, 0x00, 0x00, 0x00]
+                                              , SIADDR=[0x00, 0x00, 0x00, 0x00]
+                                              , GIADDR=[0x00, 0x00, 0x00, 0x00]
+                                              , CHADDR=[0x00, 0x05, 0x3C, 0x04]
+                                                       + [0x8D, 0x59, 0x00, 0x00]
+                                                       + [0x00, 0x00, 0x00, 0x00]
+                                                       + [0x00, 0x00, 0x00, 0x00]
+                                              , MAGIC_COOKIE=[0x63, 0x82, 0x53, 0x63]))
+        package = DHCPMessage.add_option(package, [53, 1, 1])
+        package = DHCPMessage.add_option(package, [50, 4, 0xC0, 0xA8, 0x01, 0x64])
 
         return package
 
     def request_get():
-        OP = bytes([0x01])
-        HTYPE = bytes([0x01])
-        HLEN = bytes([0x06])
-        HOPS = bytes([0x00])
-        XID = bytes([0x39, 0x03, 0xF3, 0x26])
-        SECS = bytes([0x00, 0x00])
-        FLAGS = bytes([0x00, 0x00])
-        CIADDR = bytes([0x00, 0x00, 0x00, 0x00])
-        YIADDR = bytes([0x00, 0x00, 0x00, 0x00])
-        SIADDR = bytes([0x00, 0x00, 0x00, 0x00])
-        GIADDR = bytes([0x00, 0x00, 0x00, 0x00])
-        CHADDR1 = bytes([0x00, 0x0C, 0x29, 0xDD])
-        CHADDR2 = bytes([0x5C, 0xA7, 0x00, 0x00])
-        CHADDR3 = bytes([0x00, 0x00, 0x00, 0x00])
-        CHADDR4 = bytes([0x00, 0x00, 0x00, 0x00])
-        CHADDR5 = bytes(192)
-        Magiccookie = bytes([0x63, 0x82, 0x53, 0x63])
-        DHCPOptions1 = bytes([53, 1, 3])
-        DHCPOptions2 = bytes([50, 4, 0xC0, 0xA8, 0x01, 0x64])
-        DHCPOptions3 = bytes([54, 4, 0xC0, 0xA8, 0x01, 0x01])
-
-        package = OP + HTYPE + HLEN + HOPS + XID + SECS + FLAGS + CIADDR + YIADDR + SIADDR + GIADDR + CHADDR1 + CHADDR2 + CHADDR3 + CHADDR4 + CHADDR5 + Magiccookie + DHCPOptions1 + DHCPOptions2 + DHCPOptions3
+        package = DHCPMessage.make_bytes(dict(OP=[0x01]
+                                              , HTYPE=[0x01]
+                                              , HLEN=[0x06]
+                                              , HOPS=[0x00]
+                                              , XID=[0x39, 0x03, 0xF3, 0x26]
+                                              , SECS=[0x00, 0x00]
+                                              , FLAGS=[0x00, 0x00]
+                                              , CIADDR=[0x00, 0x00, 0x00, 0x00]
+                                              , YIADDR=[0x00, 0x00, 0x00, 0x00]
+                                              , SIADDR=[0x00, 0x00, 0x00, 0x00]
+                                              , GIADDR=[0x00, 0x00, 0x00, 0x00]
+                                              , CHADDR=[0x00, 0x0C, 0x29, 0xDD]
+                                                       + [0x5C, 0xA7, 0x00, 0x00]
+                                                       + [0x00, 0x00, 0x00, 0x00]
+                                                       + [0x00, 0x00, 0x00, 0x00]
+                                              , MAGIC_COOKIE=[0x63, 0x82, 0x53, 0x63]))
+        package = DHCPMessage.add_option(package, [53, 1, 3])
+        package = DHCPMessage.add_option(package, [50, 4, 0xC0, 0xA8, 0x01, 0x64])
+        package = DHCPMessage.add_option(package, [54, 4, 0xC0, 0xA8, 0x01, 0x01])
 
         return package
 
