@@ -9,6 +9,7 @@ SIGNATURE_LENGTH = 256 # must be 256 or 512, which have to be suffix for sha{SIG
 cert_types = {
     'domain': 1,
     'rootCA': 0,
+    'rogue': 1,
     1: 'domain',
     0: 'rootCA'
 }
