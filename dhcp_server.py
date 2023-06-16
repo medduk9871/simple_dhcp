@@ -5,8 +5,10 @@ import sys
 
 from OpenSSL import crypto
 
-from common import MAX_BYTES, serverPort, clientPort, CERT_SPLIT_LENGTH, SIGNATURE_LENGTH, cert_types, DHCPMessage, \
+from common import MAX_BYTES, serverPort, clientPort, SIGNATURE_LENGTH, cert_types, DHCPMessage, \
     Option90
+
+BYTES_BIAS = 10
 
 logger = logging.getLogger(__name__)
 
@@ -33,10 +35,11 @@ class DHCP_server(object):
 
                 print("Send DHCP offer.")
                 data = DHCP_server.offer_get()
-                auth_opts_root = self.create_dhcp_option('issuerCA')
-                auth_opts_domain = self.create_dhcp_option(server_name)
-                auth_opts = auth_opts_root + auth_opts_domain
                 sign = self.sign_data(data)
+                available_bytes = MAX_BYTES - len(data + sign) - BYTES_BIAS
+                auth_opts_root = self.create_dhcp_option('issuerCA', available_bytes)
+                auth_opts_domain = self.create_dhcp_option(server_name, available_bytes)
+                auth_opts = auth_opts_root + auth_opts_domain
                 for auth_opt in auth_opts:
                     opt = DHCPMessage.change_to_bytes(Option90.get_option_no(), 1) + DHCPMessage.change_to_bytes(
                         len(sign + auth_opt), Option90._n_bytes_for_option_len)
@@ -91,21 +94,28 @@ class DHCP_server(object):
         package = DHCPMessage.add_option(package, [54, 4, 0xC0, 0xA8, 0x01, 0x01])  # DHCP server
         return package
 
-    def create_dhcp_option(self, type):
+    def create_dhcp_option(self, type, available_bytes):
         with open(f'keys/{type}.crt', 'r') as f:
             cert = f.read()
-            total_length, split_length = len(cert), CERT_SPLIT_LENGTH
+
+            auth_opt = {
+                'type': cert_types[type],
+                'total_number': 0,
+                'cur_number': 0,
+                'cert': ''
+            }
+            body = json.dumps(auth_opt)
+            available_cert_size = available_bytes - len(body)
+
+            total_length, split_length = len(cert), available_cert_size
             split_certs = [cert[i:i + split_length] for i in range(0, total_length, split_length)]
 
             auth_opts = []
             for idx, split_cert in enumerate(split_certs):
-                auth_opt = {
-                    'type': cert_types[type],
-                    'total_number': len(split_certs),
-                    'cur_number': idx + 1,
-                    'cert_length': len(cert),
-                    'cert': split_cert,
-                }
+                auth_opt['total_number'] = len(split_certs)
+                auth_opt['cur_number'] = idx + 1
+                auth_opt['cert'] = split_cert
+
                 body = json.dumps(auth_opt)
                 body = bytes(body, 'utf-8')
                 message = body
