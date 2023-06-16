@@ -1,21 +1,25 @@
 # Simple_dhcp
 
+## Prerequisite
+
++ Docker
+
 ## Start dhcp server
 
 ```
-python3 dhcp_server.py
+$ ./run.sh
 ```
 
 ## Start dhcp client
 
 ```
-python3 dhcp_client.py
+$ docker exec -it dhcp bash -c "python dhcp_client.py
 ```
 
 ### Test cert verification
 
 ```bash
-python cert_verify.py
+$ python cert_verify.py
 ```
 
 ### How did I generate certificates?
