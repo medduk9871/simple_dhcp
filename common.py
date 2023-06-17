@@ -1,6 +1,6 @@
 import collections
 
-MAX_BYTES = 1024
+MAX_BYTES = 1466
 serverPort = 67
 clientPort = 68
 CERT_SPLIT_LENGTH = 400

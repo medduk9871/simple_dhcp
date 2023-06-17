@@ -8,7 +8,7 @@ from OpenSSL import crypto
 from common import MAX_BYTES, serverPort, clientPort, SIGNATURE_LENGTH, cert_types, DHCPMessage, \
     Option90
 
-BYTES_BIAS = 10
+BYTES_BIAS = 16
 
 logger = logging.getLogger(__name__)
 
