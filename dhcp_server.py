@@ -56,12 +56,10 @@ class DHCP_server(object):
                         print("Send DHCP pack.\n")
                         data = DHCP_server.pack_get()
                         sign = self.sign_data(data)
-                        for auth_opt in auth_opts:
-                            opt = DHCPMessage.change_to_bytes(Option90.get_option_no(),
-                                                              1) + DHCPMessage.change_to_bytes(len(sign + auth_opt),
-                                                                                               Option90._n_bytes_for_option_len)
-                            new_data = DHCPMessage.add_option(data, opt + sign + auth_opt)
-                            s.sendto(new_data, dest)
+                        opt = DHCPMessage.change_to_bytes(Option90.get_option_no(),
+                                                          1) + DHCPMessage.change_to_bytes(len(sign), Option90._n_bytes_for_option_len)
+                        new_data = DHCPMessage.add_option(data, opt + sign)
+                        s.sendto(new_data, dest)
                         # s.sendto(data, dest)
                         break
                     except:

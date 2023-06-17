@@ -25,7 +25,7 @@ class DHCP_client(object):
         data = DHCP_client.request_get()
         s.sendto(data, dest)
 
-        data, address = self.check_cert_verify_and_get_data(s)
+        data, address = self.check_sign_and_get_ack(s)
         print("Receive DHCP pack.\n")
         got_ip = data['YIADDR']
         expire_days = data[Option51.get_option_no()]
@@ -37,6 +37,12 @@ class DHCP_client(object):
             cur_auth_opt = issuerCA_auth_opts[key]
             issuerCA_cert += cur_auth_opt
         return issuerCA_cert
+
+    def receive_ack(self, s):
+        data, address = s.recvfrom(MAX_BYTES)
+        signed_raw, full_data_dict = self.get_auth_opt(data)
+        signature = full_data_dict[Option90.get_option_no()]
+        return signed_raw, address, full_data_dict, signature
 
     def receive_offer(self, s):
         auth_opts = {}
@@ -57,27 +63,46 @@ class DHCP_client(object):
         cert = self.get_cert(auth_opts)
         return signed_raw, address, full_data_dict, cert
 
+    def check_sign_and_get_ack(self, s):
+        """
+        :param s: socket to recieve data
+        :return: the recieved data
+        """
+        signed_raw, address, full_data_dict, signature = self.receive_ack(s)
+
+        print("Checking signature validity...")
+        crtObj = crypto.load_certificate(crypto.FILETYPE_PEM, self.cert_dict[cert_types['domain']])
+        try:
+            crypto.verify(crtObj, signature, signed_raw, f'sha{SIGNATURE_LENGTH}')
+        except Exception as e:
+            print("Signature invalid!")
+            print(e)
+            sys.exit(1)
+        print("Signature Valid!")
+
+        return full_data_dict, address
+
     def check_cert_verify_and_get_data(self, s):
         """
         :param s: socket to recieve data
         :return: the recieved data
         """
-        cert_dict = {}
+        self.cert_dict = {}
         signed_data, address, full_data_dict, cert = self.receive_offer(s)
         auth_opt = full_data_dict[Option90.get_option_no()]
-        cert_dict[auth_opt['type']] = cert
+        self.cert_dict[auth_opt['type']] = cert
         signed_data, address, full_data_dict, cert = self.receive_offer(s)
         auth_opt = full_data_dict[Option90.get_option_no()]
-        cert_dict[auth_opt['type']] = cert
+        self.cert_dict[auth_opt['type']] = cert
 
         print("Checking cert validity...")
-        if not verify_certificate_chain(cert_dict[cert_types['domain']], [cert_dict[cert_types['issuerCA']]]):
+        if not verify_certificate_chain(self.cert_dict[cert_types['domain']], [self.cert_dict[cert_types['issuerCA']]]):
             print("Cert invalid!")
             sys.exit(1)
         print("Cert Valid!")
 
         print("Checking signature validity...")
-        crtObj = crypto.load_certificate(crypto.FILETYPE_PEM, cert_dict[cert_types['domain']])
+        crtObj = crypto.load_certificate(crypto.FILETYPE_PEM, self.cert_dict[cert_types['domain']])
         try:
             crypto.verify(crtObj, auth_opt['signature'], signed_data, f'sha{SIGNATURE_LENGTH}')
         except Exception as e:
@@ -90,8 +115,8 @@ class DHCP_client(object):
 
     def get_auth_opt(self, data):
         option_no = Option90.get_option_no()
-        signed_raw_data, full_data = list(DHCPMessage.parse(data, [option_no]))
-        return signed_raw_data, full_data
+        signed_raw_data, full_data_dict = list(DHCPMessage.parse(data, [option_no]))
+        return signed_raw_data, full_data_dict
 
     def discover_get():
         package = DHCPMessage.make_bytes(dict(OP=[0x01]

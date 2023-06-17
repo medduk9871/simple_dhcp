@@ -60,13 +60,16 @@ class Option90(Option):
     @classmethod
     def parse(cls, data):
         import json
-        auth_opt = data[SIGNATURE_LENGTH:]
         sign = data[:SIGNATURE_LENGTH]
-        # json to dict
-        di = eval(str(auth_opt))
-        auth_opt = json.loads(di.decode('utf-8'))
-        auth_opt['signature'] = sign
-        return auth_opt
+        if len(data) <= SIGNATURE_LENGTH:
+            return sign
+        else: # sign + auth opt
+            auth_opt = data[SIGNATURE_LENGTH:]
+            # json to dict
+            di = eval(str(auth_opt))
+            auth_opt = json.loads(di.decode('utf-8'))
+            auth_opt['signature'] = sign
+            return auth_opt
 
 
 class DHCPMessage:
