@@ -96,7 +96,7 @@ class DHCP_client(object):
         self.cert_dict[auth_opt['type']] = cert
 
         print("Checking cert validity...")
-        if not verify_certificate_chain(self.cert_dict[cert_types['domain']], [self.cert_dict[cert_types['issuerCA']]]):
+        if not verify_certificate_chain(self.cert_dict[cert_types['domain']], [open("keys/rootCA.crt").read(), self.cert_dict[cert_types['issuerCA']]]):
             print("Cert invalid!")
             sys.exit(1)
         print("Cert Valid!")
