@@ -13,7 +13,7 @@ $ ./run.sh
 ## Start dhcp client
 
 ```
-$ docker exec -it dhcp bash -c "python dhcp_client.py
+$ docker exec -it dhcp bash -c "python dhcp_client.py"
 ```
 
 ### Test cert verification
