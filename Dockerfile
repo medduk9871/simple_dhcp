@@ -5,4 +5,6 @@ COPY . .
 EXPOSE 67/udp
 EXPOSE 68/udp
 
-CMD ["python3", "dhcp_server.py"]
+RUN pip install -r requirements.txt
+
+CMD python dhcp_server.py domain

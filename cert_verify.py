@@ -1,20 +1,18 @@
-from OpenSSL import crypto
-import os, sys
+import os
 
-def verify_certificate_chain(cert_path, trusted_certs):
+from OpenSSL import crypto
+
+
+def verify_certificate_chain(cert_data, trusted_cert_datas):
     # Download the certificate from the url and load the certificate
-    cert_file = open(cert_path, 'rb')
-    cert_data = cert_file.read()
     certificate = crypto.load_certificate(crypto.FILETYPE_PEM, cert_data)
 
-    #Create a certificate store and add your trusted certs
+    # Create a certificate store and add your trusted certs
     try:
         store = crypto.X509Store()
 
         # Assuming the certificates are in PEM format in a trusted_certs list
-        for _cert in trusted_certs:
-            cert_file = open(_cert, 'rb')
-            cert_data = cert_file.read()
+        for cert_data in trusted_cert_datas:
             client_certificate = crypto.load_certificate(crypto.FILETYPE_PEM, cert_data)
             store.add_cert(client_certificate)
 
@@ -27,16 +25,16 @@ def verify_certificate_chain(cert_path, trusted_certs):
         return True
 
     except Exception as e:
-        print(e)
+        # print(e)
         return False
 
+
 if __name__ == "__main__":
-    cert_path = os.path.join("keys", "domain.crt")
-    trusted_certs = [os.path.join("keys", "rootCA.crt")]
+    for crt_name in ['domain.crt', 'rogue.crt']:
+        cert_path = os.path.join("keys", crt_name)
+        trusted_certs = [os.path.join("keys", "issuerCA.crt")]
 
-    if not verify_certificate_chain(cert_path, trusted_certs):
-        print("Invalid certificate!")
-        sys.exit(1)
-
-    print("Valid certificate!")
-    sys.exit(0)
+        if not verify_certificate_chain(cert_path, trusted_certs):
+            print(f"{crt_name}: Invalid certificate!")
+        else:
+            print(f"{crt_name}: Valid certificate!")
